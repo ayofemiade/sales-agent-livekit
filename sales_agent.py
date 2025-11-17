@@ -19,26 +19,23 @@ try:
 except Exception as e:
     raise SystemExit(f"Missing livekit packages or incompatible versions: {e}")
 
-# plugin imports are optional (silero may require extra deps)
-openai = None
-cartesia = None
-silero = None
+# optional plugin imports
+openai = cartesia = silero = None
 try:
     from livekit.plugins import openai as _openai, cartesia as _cartesia, silero as _silero
     openai, cartesia, silero = _openai, _cartesia, _silero
-    log.info("Plugins: openai/cartesia/silero imported")
+    log.info("Plugins imported")
 except Exception as e:
-    log.warning("One or more livekit plugins failed to import (optional): %s", e)
+    log.warning("Optional plugins failed to import: %s", e)
 
 # --- environment keys ---
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
-CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
 
-# Basic sanity check
-if not CEREBRAS_API_KEY or not CARTESIA_API_KEY:
-    raise SystemExit("❌ Please set CEREBRAS_API_KEY and CARTESIA_API_KEY in your .env file")
+# Only Cartesia is required for STT/TTS
+if not CARTESIA_API_KEY:
+    raise SystemExit("❌ Please set CARTESIA_API_KEY in your .env file")
 
 # --- context loader ---
 def load_context() -> str:
@@ -54,104 +51,81 @@ def load_context() -> str:
                 log.warning("Skipped %s: %s", file_path.name, e)
     return all_content.strip() or "No context files found"
 
-# --- entrypoint: what the worker runs for each job ---
+# --- entrypoint: executes per job ---
 async def entry(ctx: JobContext):
-    """
-    ctx: JobContext provided by livekit.agents runtime.
-    This function must be async. We:
-      - wait for a connection object from ctx.connect()
-      - use it as an async context manager
-      - speak a welcome via agent.say() if available, otherwise fallback to log
-      - keep the worker alive (so it can handle incoming events)
-    """
-    log.info("🚀 Sales Agent starting (entry)...")
-    context_data = load_context()
-    log.info("✅ Context loaded (%d chars)", len(context_data))
+    log.info("🚀 Sales Agent starting...")
 
-    # initialize optional plugins (best-effort)
+    context_data = load_context()
+    log.info("✅ Loaded context (%d chars)", len(context_data))
+
+    # Initialize plugins
     llm = stt = tts = vad = None
-    if openai is not None:
+
+    if openai:
         try:
             llm = openai.LLM.with_cerebras(model="llama-3.3-70b")
-            log.info("openai LLM initialized (Cerebras)")
+            log.info("LLM initialized (Cerebras)")
         except Exception as e:
-            log.warning("openai plugin init failed: %s", e)
+            log.warning("LLM init failed: %s", e)
 
-    if cartesia is not None:
+    if cartesia:
         try:
             stt = cartesia.STT()
             tts = cartesia.TTS()
-            log.info("cartesia STT/TTS initialized")
+            log.info("Cartesia STT/TTS initialized")
         except Exception as e:
-            log.warning("cartesia plugin init failed: %s", e)
+            log.warning("Cartesia init failed: %s", e)
 
-    if silero is not None:
+    if silero:
         try:
             vad = silero.VAD.load()
-            log.info("silero VAD loaded")
+            log.info("Silero VAD loaded")
         except Exception as e:
-            log.warning("silero VAD init failed (optional): %s", e)
+            log.warning("VAD init failed: %s", e)
 
-    # Agent personality / instructions (kept for potential LLM usage)
+    # Instructions for the agent
     instructions = f"""
-    You are a friendly, professional sales agent who speaks with warmth and clarity.
-    Use ONLY the information provided in the context below.
+    You are a friendly, helpful sales agent. Speak naturally and warmly.
+    Only use the information in the context below.
+
     {context_data}
+
     RULES:
-      - If something isn't in the context, say: "I don't have that information."
-      - Keep replies short and natural for speech.
+      - If asked anything outside the context, say: "I don't have that information."
+      - Keep responses short for speaking.
     """
 
     # ===== CONNECT CORRECTLY =====
-    # ctx.connect() is a coroutine that returns a connection-like object.
-    conn = await ctx.connect()  # await the coroutine first
-    # Now use the returned object as an async context manager
-    async with conn as agent:
-        # On startup, attempt to send a spoken welcome if the runtime supports agent.say()
+    connection = await ctx.connect()
+
+    async with connection as agent:
         welcome = "Hello! I'm your virtual sales assistant. How can I help you today?"
-        if hasattr(agent, "say") and asyncio.iscoroutinefunction(getattr(agent, "say")):
+
+        if hasattr(agent, "say") and asyncio.iscoroutinefunction(agent.say):
             try:
-                log.info("Sending agent welcome (voice)...")
+                log.info("Sending welcome message...")
                 await agent.say(welcome)
             except Exception as e:
-                log.warning("agent.say failed; falling back to log. %s", e)
-                log.info("Would say: %s", welcome)
+                log.warning("agent.say failed: %s", e)
         else:
-            # If no say() support, just log the welcome
-            log.info("Agent (no TTS available) - welcome: %s", welcome)
+            log.info("No TTS available. Welcome: %s", welcome)
 
         log.info("🗣️ Agent is live and listening...")
 
-        # Keep the agent alive. LiveKit runtime will route media/events in background.
-        # We block here until the process is signaled to shut down.
         try:
-            # wait forever (or until cancelled)
             await asyncio.Event().wait()
         except asyncio.CancelledError:
-            log.info("Agent shutdown requested, exiting entry.")
+            log.info("Agent shutdown requested.")
 
-# --- CLI runner: construct WorkerOptions robustly and run the CLI ---
+# --- Worker options ---
 def build_worker_options_for_entry(entry_fn):
-    """
-    WorkerOptions constructors changed across versions (entry, entrypoint, entrypoint_fnc).
-    Try common signatures in order and return a constructed instance.
-    """
-    last_exc = None
-    for kw in ("entrypoint_fnc", "entry", "entrypoint"):
+    for param in ("entrypoint_fnc", "entry", "entrypoint"):
         try:
-            return WorkerOptions(**{kw: entry_fn})
-        except TypeError as e:
-            last_exc = e
+            return WorkerOptions(**{param: entry_fn})
+        except TypeError:
             continue
-    # if none worked, raise a helpful message
-    raise TypeError("Unable to construct WorkerOptions with known parameter names. Last error: %s" % last_exc)
+    raise TypeError("WorkerOptions cannot accept entry function.")
 
 if __name__ == "__main__":
-    # create options and run CLI
-    try:
-        options = build_worker_options_for_entry(entry)
-    except Exception as e:
-        raise SystemExit(f"Failed to construct WorkerOptions: {e}")
-
-    # run the CLI runner (dev / console / start etc.)
+    options = build_worker_options_for_entry(entry)
     cli.run_app(options)

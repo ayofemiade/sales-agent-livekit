@@ -30,10 +30,10 @@ def load_context() -> str:
                 log.warning("Skipped %s: %s", file_path.name, e)
     return all_content.strip() or "No context files found"
 
-async def test_with_mock_llm():
-    """Test agent responses with a mock LLM (simulated responses)."""
+async def test_with_real_llm():
+    """Test agent responses with real LLM."""
     log.info("=" * 60)
-    log.info("📞 INTERACTIVE SALES AGENT TEST (Mock Mode)")
+    log.info("📞 INTERACTIVE SALES AGENT TEST (Real LLM Mode)")
     log.info("=" * 60)
     
     context_data = load_context()
@@ -51,8 +51,10 @@ async def test_with_mock_llm():
     
     try:
         from livekit.plugins import openai
+        from livekit.agents import llm
         
-        llm = openai.LLM.with_cerebras(model="llama-3.3-70b")
+        # Create LLM instance
+        model = openai.LLM.with_cerebras(model="llama-3.3-70b")
         
         instructions = f"""
 You are a friendly, helpful sales agent. Speak naturally and warmly.
@@ -72,14 +74,27 @@ RULES:
             log.info(f"📝 Query {i}: {query}")
             
             try:
-                response = await llm.agentic_loop(
-                    messages=[
-                        {"role": "system", "content": instructions},
-                        {"role": "user", "content": query}
-                    ]
+                # Create chat context with system message and user query
+                chat_context = llm.ChatContext()
+                chat_context.messages.append(
+                    llm.ChatMessage(role="system", content=instructions)
+                )
+                chat_context.messages.append(
+                    llm.ChatMessage(role="user", content=query)
                 )
                 
-                log.info(f"🤖 Response: {response}\n")
+                # Get response from LLM
+                response_stream = model.chat(chat_ctx=chat_context)
+                
+                # Collect the full response
+                full_response = ""
+                async for chunk in response_stream:
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            full_response += delta.content
+                
+                log.info(f"🤖 Response: {full_response.strip()}\n")
                 
             except Exception as e:
                 log.error(f"❌ Error: {e}\n")
@@ -88,34 +103,43 @@ RULES:
         
         log.info("✅ Interactive test completed!")
         
+    except ImportError as e:
+        log.error(f"❌ Required library not available: {e}")
+        log.info("\nMake sure you have 'livekit-agents' and 'livekit-plugins-openai' installed:")
+        log.info("  pip install livekit-agents livekit-plugins-openai\n")
+        await run_mock_test(test_queries)
+        
     except Exception as e:
-        log.error(f"❌ LLM not available: {e}")
+        log.error(f"❌ LLM error: {e}")
         log.info("\nRunning mock test instead...\n")
-        
-        # Mock responses for testing without API
-        mock_responses = {
-            "What products do you offer?": "We offer a Website Starter Pack - a modern 3-page website built with HTML/CSS/JavaScript, including a contact form and hosting support for 1 month. It's priced at ₦50,000.",
-            "How much does the website starter pack cost?": "The Website Starter Pack costs ₦50,000.",
-            "Tell me about your services": "We specialize in affordable website solutions. Our main offering is the Website Starter Pack at ₦50,000.",
-            "What's included in the package?": "The package includes a modern 3-page website, HTML/CSS/JS development, a contact form, and 1 month of hosting support.",
-            "How long is the hosting support?": "The hosting support is included for 1 month with our Website Starter Pack.",
-            "Do you offer custom websites?": "I don't have that information about custom website services. I can only tell you about our Website Starter Pack.",
-            "What's your phone number?": "I don't have that information.",
-        }
-        
-        log.info("🎭 Testing with mock responses:\n")
-        
-        for i, query in enumerate(test_queries, 1):
-            log.info(f"📝 Query {i}: {query}")
-            response = mock_responses.get(query, "I don't have that information.")
-            log.info(f"🤖 Response: {response}\n")
-            await asyncio.sleep(0.5)
-        
-        log.info("✅ Mock test completed!")
+        await run_mock_test(test_queries)
+
+async def run_mock_test(test_queries):
+    """Run test with mock responses."""
+    # Mock responses for testing without API
+    mock_responses = {
+        "What products do you offer?": "We offer a Website Starter Pack - a modern 3-page website built with HTML/CSS/JavaScript, including a contact form and hosting support for 1 month. It's priced at ₦50,000.",
+        "How much does the website starter pack cost?": "The Website Starter Pack costs ₦50,000.",
+        "Tell me about your services": "We specialize in affordable website solutions. Our main offering is the Website Starter Pack at ₦50,000.",
+        "What's included in the package?": "The package includes a modern 3-page website, HTML/CSS/JS development, a contact form, and 1 month of hosting support.",
+        "How long is the hosting support?": "The hosting support is included for 1 month with our Website Starter Pack.",
+        "Do you offer custom websites?": "I don't have that information about custom website services. I can only tell you about our Website Starter Pack.",
+        "What's your phone number?": "I don't have that information.",
+    }
+    
+    log.info("🎭 Testing with mock responses:\n")
+    
+    for i, query in enumerate(test_queries, 1):
+        log.info(f"📝 Query {i}: {query}")
+        response = mock_responses.get(query, "I don't have that information.")
+        log.info(f"🤖 Response: {response}\n")
+        await asyncio.sleep(0.5)
+    
+    log.info("✅ Mock test completed!")
 
 async def main():
     try:
-        await test_with_mock_llm()
+        await test_with_real_llm()
     except KeyboardInterrupt:
         log.info("\n🛑 Test interrupted by user")
     except Exception as e:

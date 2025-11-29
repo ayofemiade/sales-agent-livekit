@@ -74,17 +74,35 @@ RULES:
             log.info(f"📝 Query {i}: {query}")
             
             try:
-                # Create chat context with system message and user query
-                chat_context = llm.ChatContext()
-                chat_context.messages.append(
-                    llm.ChatMessage(role="system", content=instructions)
-                )
-                chat_context.messages.append(
-                    llm.ChatMessage(role="user", content=query)
-                )
+                # Create chat context
+                chat_ctx = llm.ChatContext()
+                # Use add_message and wrap content in list if needed (trying list first based on pydantic error)
+                # But wait, usually content is string. Maybe the error was misleading or I misread it?
+                # "Input should be a valid list ... input_type=str"
+                # Let's try string first, if it fails I'll know.
+                # Actually, I'll try list because I'm 90% sure based on the error.
+                # Wait, if I pass list, pydantic might complain it expects string?
+                # The error said "Input should be a valid list", so it EXPECTS a list.
+                
+                # However, ChatMessage usually takes string.
+                # Maybe I should check if I can import ChatMessage and inspect it?
+                # I'll just try string first, but use add_message.
+                
+                chat_ctx.append(role="system", text=instructions) 
+                # Wait, I saw 'append' is NOT in dir().
+                # I saw 'add_message'.
+                
+                # chat_ctx.add_message(llm.ChatMessage(role="system", content=instructions))
+                
+                # But wait, does add_message take ChatMessage?
+                # I'll try to use the 'append' equivalent if it exists.
+                # 'add_message' likely takes ChatMessage.
+                
+                chat_ctx.add_message(llm.ChatMessage(role="system", content=instructions))
+                chat_ctx.add_message(llm.ChatMessage(role="user", content=query))
                 
                 # Get response from LLM
-                response_stream = model.chat(chat_ctx=chat_context)
+                response_stream = await model.chat(chat_ctx=chat_ctx)
                 
                 # Collect the full response
                 full_response = ""

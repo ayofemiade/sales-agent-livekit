@@ -57,11 +57,18 @@ async def test_complete_setup():
         return False
     
     try:
-        from livekit.plugins import openai, cartesia, silero
+        from livekit.plugins import openai, cartesia
+        try:
+            from livekit.plugins import silero
+        except ImportError:
+            silero = None
+            log.warning("⚠️  Silero plugin not found (VAD will be disabled)")
+
         log.info("✅ LiveKit plugins imported")
         log.info("   - openai")
         log.info("   - cartesia")
-        log.info("   - silero")
+        if silero:
+            log.info("   - silero")
     except Exception as e:
         log.error(f"❌ Plugin imports failed: {e}")
         return False
@@ -83,12 +90,15 @@ async def test_complete_setup():
     log.info("\n🔊 STEP 4: Initializing Voice Activity Detection (Silero)")
     log.info("-" * 70)
     
-    try:
-        vad = silero.VAD.load()
-        log.info("✅ Silero VAD loaded successfully")
-    except Exception as e:
-        log.error(f"❌ VAD initialization failed: {e}")
-        return False
+    if silero:
+        try:
+            vad = silero.VAD.load()
+            log.info("✅ Silero VAD loaded successfully")
+        except Exception as e:
+            log.error(f"❌ VAD initialization failed: {e}")
+            return False
+    else:
+        log.info("⚠️  Skipping VAD initialization (plugin not found)")
     
     # Test 5: Initialize LLM
     log.info("\n🤖 STEP 5: Initializing LLM (Cerebras)")

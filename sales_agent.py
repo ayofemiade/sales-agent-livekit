@@ -14,26 +14,29 @@ load_dotenv()
 
 # --- defensive imports for LiveKit ---
 try:
-    from livekit.agents import WorkerOptions, JobContext
-    from livekit.agents.cli import cli
+    from livekit.agents import (
+        AutoSubscribe,
+        JobContext,
+        WorkerOptions,
+        cli,
+        llm,
+    )
+    from livekit.agents.voice import Agent
+    from livekit.plugins import openai, cartesia
 except Exception as e:
     raise SystemExit(f"Missing livekit packages or incompatible versions: {e}")
 
-# optional plugin imports
-openai = cartesia = silero = None
+# Try to import silero (optional)
 try:
-    from livekit.plugins import openai as _openai, cartesia as _cartesia, silero as _silero
-    openai, cartesia, silero = _openai, _cartesia, _silero
-    log.info("Plugins imported")
-except Exception as e:
-    log.warning("Optional plugins failed to import: %s", e)
+    from livekit.plugins import silero
+except ImportError:
+    silero = None
+    log.warning("Silero VAD not available")
 
 # --- environment keys ---
 CARTESIA_API_KEY = os.getenv("CARTESIA_API_KEY")
-LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY")
-LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET")
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
 
-# Only Cartesia is required for STT/TTS
 if not CARTESIA_API_KEY:
     raise SystemExit("❌ Please set CARTESIA_API_KEY in your .env file")
 
@@ -52,80 +55,55 @@ def load_context() -> str:
     return all_content.strip() or "No context files found"
 
 # --- entrypoint: executes per job ---
-async def entry(ctx: JobContext):
+async def entrypoint(ctx: JobContext):
     log.info("🚀 Sales Agent starting...")
 
+    # Load context
     context_data = load_context()
     log.info("✅ Loaded context (%d chars)", len(context_data))
 
-    # Initialize plugins
-    llm = stt = tts = vad = None
+    # Instructions for the agent
+    initial_instructions = f"""You are a friendly, helpful sales agent. Speak naturally and warmly.
+Only use the information in the context below.
 
-    if openai:
-        try:
-            llm = openai.LLM.with_cerebras(model="llama-3.3-70b")
-            log.info("LLM initialized (Cerebras)")
-        except Exception as e:
-            log.warning("LLM init failed: %s", e)
+{context_data}
 
-    if cartesia:
-        try:
-            stt = cartesia.STT()
-            tts = cartesia.TTS()
-            log.info("Cartesia STT/TTS initialized")
-        except Exception as e:
-            log.warning("Cartesia init failed: %s", e)
+RULES:
+  - If asked anything outside the context, say: "I don't have that information."
+  - Keep responses short and conversational for speaking.
+  - Be helpful and encouraging.
+"""
 
+    # Connect to the room
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    log.info("Connected to room")
+
+    # Initialize VAD (try silero, fall back to None)
+    vad_instance = None
     if silero:
         try:
-            vad = silero.VAD.load()
-            log.info("Silero VAD loaded")
+            vad_instance = silero.VAD.load()
+            log.info("VAD loaded")
         except Exception as e:
-            log.warning("VAD init failed: %s", e)
+            log.warning(f"VAD init failed: {e}, using no VAD")
 
-    # Instructions for the agent
-    instructions = f"""
-    You are a friendly, helpful sales agent. Speak naturally and warmly.
-    Only use the information in the context below.
+    # Create the voice agent
+    agent = Agent(
+        instructions=initial_instructions,  # REQUIRED parameter
+        vad=vad_instance,
+        stt=cartesia.STT(),
+        llm=openai.LLM.with_cerebras(model="llama-3.3-70b"),
+        tts=cartesia.TTS(),
+        allow_interruptions=True,
+    )
 
-    {context_data}
+    # Start the agent
+    agent.start(ctx.room)
+    log.info("🗣️ Voice agent started and listening...")
 
-    RULES:
-      - If asked anything outside the context, say: "I don't have that information."
-      - Keep responses short for speaking.
-    """
-
-    # ===== CONNECT CORRECTLY =====
-    connection = await ctx.connect()
-
-    async with connection as agent:
-        welcome = "Hello! I'm your virtual sales assistant. How can I help you today?"
-
-        if hasattr(agent, "say") and asyncio.iscoroutinefunction(agent.say):
-            try:
-                log.info("Sending welcome message...")
-                await agent.say(welcome)
-            except Exception as e:
-                log.warning("agent.say failed: %s", e)
-        else:
-            log.info("No TTS available. Welcome: %s", welcome)
-
-        log.info("🗣️ Agent is live and listening...")
-
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            log.info("Agent shutdown requested.")
-
-# --- Worker options ---
-def build_worker_options_for_entry(entry_fn):
-    for param in ("entrypoint_fnc", "entry", "entrypoint"):
-        try:
-            return WorkerOptions(**{param: entry_fn})
-        except TypeError:
-            continue
-    raise TypeError("WorkerOptions cannot accept entry function.")
+    # Greet the user
+    await agent.say("Hello! I'm your virtual sales assistant. How can I help you today?", allow_interruptions=True)
+    log.info("✅ Greeted user")
 
 if __name__ == "__main__":
-    options = build_worker_options_for_entry(entry)
-    cli.run_app(options)
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))

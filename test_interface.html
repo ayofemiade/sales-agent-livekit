@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Agent Test Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            margin-bottom: 30px;
+            font-size: 0.95rem;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+        }
+
+        .status.ready {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #38a169;
+        }
+
+        .status.connecting {
+            background: #fef5cd;
+            color: #744210;
+            border-left: 4px solid #d69e2e;
+        }
+
+        .status.error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #e53e3e;
+        }
+
+        .config-section {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .config-section h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            color: #4a5568;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .instructions {
+            background: #edf2f7;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .instructions h3 {
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+            color: #4a5568;
+            line-height: 1.8;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+        }
+
+        .instructions code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: #d53f8c;
+        }
+
+        .video-container {
+            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .video-container.active {
+            display: block;
+        }
+
+        #remoteVideo {
+            width: 100%;
+            background: #000;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🤖 Sales Agent Test</h1>
+        <p class="subtitle">Test your LiveKit voice agent</p>
+
+        <div class="status ready">
+            <span>✅</span>
+            <span>Agent components tested and ready</span>
+        </div>
+
+        <div class="config-section">
+            <h3>🔧 LiveKit Configuration</h3>
+
+            <div class="input-group">
+                <label for="livekitUrl">LiveKit URL</label>
+                <input type="text" id="livekitUrl" placeholder="wss://your-livekit-url.livekit.cloud" value="">
+            </div>
+
+            <div class="input-group">
+                <label for="roomName">Room Name</label>
+                <input type="text" id="roomName" placeholder="test-room" value="test-room">
+            </div>
+
+            <div class="input-group">
+                <label for="participantName">Your Name</label>
+                <input type="text" id="participantName" placeholder="Tester" value="Tester">
+            </div>
+        </div>
+
+        <button id="connectBtn" onclick="connectToRoom()">
+            🎙️ Start Agent Test
+        </button>
+
+        <div class="video-container" id="videoContainer">
+            <video id="remoteVideo" autoplay playsinline></video>
+        </div>
+
+        <div class="instructions">
+            <h3>📋 How to Test</h3>
+            <ol>
+                <li>First, start your agent: <code>python sales_agent.py</code></li>
+                <li>Enter your LiveKit URL from the <code>.env</code> file</li>
+                <li>Click "Start Agent Test" to connect</li>
+                <li>Allow microphone access when prompted</li>
+                <li>Start talking to test the agent!</li>
+            </ol>
+
+            <h3 style="margin-top: 20px;">💡 Quick Test on LiveKit Studio</h3>
+            <ol>
+                <li>Go to <a href="https://studio.livekit.io/" target="_blank"
+                        style="color: #667eea;">studio.livekit.io</a></li>
+                <li>Enter your LiveKit URL and API credentials</li>
+                <li>Create/join a room (any name)</li>
+                <li>Your agent will automatically join</li>
+                <li>Test by speaking!</li>
+            </ol>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.min.js"></script>
+    <script>
+        // Load config from .env if available
+        window.addEventListener('DOMContentLoaded', () => {
+            // Optional: Check if we can reach the token endpoint
+            fetch('/token').then(res => res.json()).then(data => {
+                if (data.url) {
+                    document.getElementById('livekitUrl').value = data.url;
+                }
+                if (data.room) {
+                    document.getElementById('roomName').value = data.room;
+                }
+            }).catch(err => {
+                console.log("Running in standalone mode or server not reachable");
+            });
+        });
+
+        async function connectToRoom() {
+            const connectBtn = document.getElementById('connectBtn');
+            const statusDiv = document.querySelector('.status');
+
+            try {
+                connectBtn.disabled = true;
+                connectBtn.innerHTML = '⏳ Connecting...';
+
+                // Fetch token from our local server
+                const response = await fetch('/token');
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const url = data.url;
+                const token = data.token;
+
+                // Connect to LiveKit
+                const room = new LivekitClient.Room();
+
+                room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    if (track.kind === LivekitClient.Track.Kind.Video || track.kind === LivekitClient.Track.Kind.Audio) {
+                        const element = track.attach();
+                        document.getElementById('videoContainer').appendChild(element);
+                        document.getElementById('videoContainer').classList.add('active');
+                    }
+                });
+
+                await room.connect(url, token);
+                console.log('Connected to room', room.name);
+
+                // Publish local microphone
+                await room.localParticipant.enableMicrophone();
+
+                statusDiv.className = 'status ready';
+                statusDiv.innerHTML = '<span>🟢</span><span>Connected to ' + room.name + '</span>';
+                connectBtn.innerHTML = '🎙️ Connected';
+
+            } catch (error) {
+                console.error('Error connecting:', error);
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = '<span>❌</span><span>Error: ' + error.message + '</span>';
+                connectBtn.disabled = false;
+                connectBtn.innerHTML = '🎙️ Start Agent Test';
+                alert('Connection failed: ' + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

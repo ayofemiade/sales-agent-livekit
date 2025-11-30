@@ -266,7 +266,7 @@
         </div>
     </div>
 
-    <script src="https://unpkg.com/livekit-client@latest/dist/livekit-client.umd.min.js"></script>
+    <script src="./node_modules/livekit-client/dist/livekit-client.umd.js"></script>
     <script>
         // Load config from .env if available
         window.addEventListener('DOMContentLoaded', () => {
@@ -317,7 +317,7 @@
                 console.log('Connected to room', room.name);
 
                 // Publish local microphone
-                await room.localParticipant.enableMicrophone();
+                await room.localParticipant.setMicrophoneEnabled(true);
 
                 statusDiv.className = 'status ready';
                 statusDiv.innerHTML = '<span>🟢</span><span>Connected to ' + room.name + '</span>';

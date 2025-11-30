@@ -1,6 +1,5 @@
 # sales_agent.py
 import os
-import asyncio
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
@@ -19,7 +18,6 @@ try:
         JobContext,
         WorkerOptions,
         cli,
-        llm,
     )
     from livekit.agents.voice import Agent
     from livekit.plugins import openai, cartesia
@@ -74,10 +72,6 @@ RULES:
   - Be helpful and encouraging.
 """
 
-    # Connect to the room
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-    log.info("Connected to room")
-
     # Initialize VAD (try silero, fall back to None)
     vad_instance = None
     if silero:
@@ -87,23 +81,24 @@ RULES:
         except Exception as e:
             log.warning(f"VAD init failed: {e}, using no VAD")
 
-    # Create the voice agent
+    # Connect to the room
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    log.info("Connected to room")
+
+    # Create the voice agent - this automatically starts it
     agent = Agent(
-        instructions=initial_instructions,  # REQUIRED parameter
+        instructions=initial_instructions,
         vad=vad_instance,
         stt=cartesia.STT(),
         llm=openai.LLM.with_cerebras(model="llama-3.3-70b"),
         tts=cartesia.TTS(),
         allow_interruptions=True,
     )
-
-    # Start the agent
-    agent.start(ctx.room)
-    log.info("🗣️ Voice agent started and listening...")
-
-    # Greet the user
-    await agent.say("Hello! I'm your virtual sales assistant. How can I help you today?", allow_interruptions=True)
-    log.info("✅ Greeted user")
+    
+    # The agent lifecycle is managed by the framework
+    # Just call on_enter to start the session
+    await agent.on_enter()
+    log.info("🗣️ Voice agent started")
 
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
